@@ -15,6 +15,8 @@ def client():
 def reset_calendar_mock(monkeypatch):
     """Ensure in-memory mock mode and clean state for tests without external network dependencies."""
     from app.core.config import settings
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    monkeypatch.setattr(settings, "VAPI_SECRET_TOKEN", None)
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", None)
     service = get_calendar_service()
     service._client = None
