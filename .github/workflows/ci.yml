@@ -54,7 +54,8 @@ jobs:
       - name: Install dependencies
         run: |
           cd frontend
-          npm ci
+          npm install
+
 
       - name: Build Next.js application
         run: |
