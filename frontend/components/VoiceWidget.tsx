@@ -64,6 +64,7 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
 }) => {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [liveActivity, setLiveActivity] = useState<string | null>(null);
 
   const isInCall =
     status === "connected" || status === "speaking" || status === "listening";
@@ -186,13 +187,15 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
 
       if (message.type === "function-call" || message.type === "tool-calls") {
         const fnName = message.functionCall?.name || message.toolCalls?.[0]?.function?.name;
-        onNewMessage({
-          id: `${Date.now()}-tool`,
-          role: "tool",
-          text: `Executing tool: ${fnName}`,
-          toolName: fnName,
-          timestamp: new Date().toLocaleTimeString(),
-        });
+
+        // Friendly live activity notice in voice console rather than raw developer callouts in chat
+        if (fnName === "check_availability") {
+          setLiveActivity("Checking real-time calendar availability...");
+          setTimeout(() => setLiveActivity(null), 3500);
+        } else if (fnName === "book_meeting") {
+          setLiveActivity("Securing Google Calendar slot...");
+          setTimeout(() => setLiveActivity(null), 4000);
+        }
 
         if (fnName === "book_meeting") {
           const rawParams =
@@ -261,6 +264,7 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
         message.type === "function-call-result" ||
         message.type === "tool-call-result"
       ) {
+        setLiveActivity(null);
         const result = message.result || message.functionCallResult;
         if (result && result.meeting_pass && onMeetingPassUpdated) {
           const mp = result.meeting_pass;
@@ -329,6 +333,11 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
   } else if (status === "error") {
     statusText = "Connection Notice";
     subText = errorMessage || "Voice stream temporarily disconnected";
+  }
+
+  // Override subtext with friendly live activity if calendar lookup is actively occurring
+  if (liveActivity && isInCall) {
+    subText = liveActivity;
   }
 
   return (

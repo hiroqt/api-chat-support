@@ -488,21 +488,6 @@ button {
   color: #ffffff;
 }
 
-/* Tool execution callout in transcript */
-.tool-callout {
-  align-self: center;
-  background-color: #121824;
-  border: 1px dashed #2b3952;
-  border-radius: 6px;
-  padding: 0.5rem 0.875rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: #93c5fd;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 /* Confirmed Booking Card (Legacy fallback) */
 .booking-banner {
   background-color: #0d281e;

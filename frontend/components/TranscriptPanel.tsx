@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { MessageSquare, CalendarCheck, Wrench } from "lucide-react";
+import { MessageSquare, CalendarCheck } from "lucide-react";
 import { MeetingPassCard, MeetingPassData } from "./MeetingPassCard";
 
 export interface MessageTurn {
@@ -33,6 +33,11 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Show only natural conversational turns (filter out any internal tool messages)
+  const conversationalMessages = messages.filter(
+    (msg) => msg.role === "assistant" || msg.role === "user"
+  );
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -44,27 +49,18 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
       <div className="transcript-header">
         <span className="transcript-title">Live Conversation Stream</span>
         <span className="transcript-badge">
-          {messages.length} {messages.length === 1 ? "turn" : "turns"}
+          {conversationalMessages.length} {conversationalMessages.length === 1 ? "turn" : "turns"}
         </span>
       </div>
 
       <div className="transcript-body" ref={scrollRef}>
-        {messages.length === 0 ? (
+        {conversationalMessages.length === 0 ? (
           <div className="transcript-empty">
             <MessageSquare size={36} strokeWidth={1.5} color="#475569" />
             <p>Ready to converse. Start the call to speak with the BrainCX voice representative.</p>
           </div>
         ) : (
-          messages.map((msg) => {
-            if (msg.role === "tool") {
-              return (
-                <div key={msg.id} className="tool-callout">
-                  <Wrench size={14} />
-                  <span>Calendar Tool: {msg.toolName || "Executing"}</span>
-                </div>
-              );
-            }
-
+          conversationalMessages.map((msg) => {
             const isAssistant = msg.role === "assistant";
 
             return (
@@ -100,4 +96,5 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
     </div>
   );
 };
+
 
