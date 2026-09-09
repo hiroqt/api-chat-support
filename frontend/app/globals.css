@@ -396,7 +396,8 @@ button {
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  height: 580px;
+  min-height: 580px;
+  height: 600px;
 }
 
 .transcript-header {
@@ -413,6 +414,12 @@ button {
   color: var(--text-primary);
 }
 
+.transcript-header-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .transcript-badge {
   font-size: 0.6875rem;
   font-family: var(--font-mono);
@@ -423,6 +430,13 @@ button {
   border: 1px solid var(--border-subtle);
 }
 
+.transcript-badge.badge-confirmed {
+  background-color: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  font-weight: 600;
+}
+
 .transcript-body {
   flex: 1;
   padding: 1.25rem 1.5rem;
@@ -430,6 +444,24 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  scroll-behavior: smooth;
+}
+
+.transcript-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.transcript-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.transcript-body::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+
+.transcript-body::-webkit-scrollbar-thumb:hover {
+  background: #334155;
 }
 
 .transcript-empty {
@@ -437,7 +469,8 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  flex: 1;
+  min-height: 220px;
   color: var(--text-muted);
   text-align: center;
   gap: 0.5rem;
@@ -515,16 +548,25 @@ button {
 /* ==========================================================================
    Interactive Post-Booking Confirmation & Real-Time Meeting Pass
    ========================================================================== */
+.meeting-pass-wrapper {
+  width: 100%;
+}
+
 .meeting-pass-card {
   background: linear-gradient(180deg, rgba(17, 24, 39, 0.98) 0%, rgba(15, 20, 32, 0.95) 100%);
   border: 1px solid rgba(59, 130, 246, 0.3);
   border-radius: 12px;
-  padding: 1.4rem;
+  padding: 1.3rem 1.4rem;
   margin-top: 1.25rem;
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.08);
   animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
+}
+
+.meeting-pass-wrapper:first-child .meeting-pass-card,
+.meeting-pass-card:first-child {
+  margin-top: 0;
 }
 
 .meeting-pass-card.confirmed {
@@ -540,6 +582,8 @@ button {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .pass-status-pill {
@@ -690,6 +734,7 @@ button {
   padding: 0.75rem 0.9rem;
   margin-bottom: 1rem;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .meet-icon-wrapper {

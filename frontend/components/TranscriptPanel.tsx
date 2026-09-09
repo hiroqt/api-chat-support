@@ -53,14 +53,34 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   meetingPass,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const meetingPassRef = useRef<HTMLDivElement>(null);
 
   // Show only natural conversational turns (filter out any internal tool messages)
   const conversationalMessages = messages.filter(
     (msg) => msg.role === "assistant" || msg.role === "user"
   );
 
+  // Never show the empty-call placeholder if a meeting pass or booking has been created
+  const showEmptyState =
+    conversationalMessages.length === 0 && !meetingPass && !latestBooking;
+
   useEffect(() => {
-    if (scrollRef.current) {
+    if (meetingPass && meetingPassRef.current && scrollRef.current) {
+      // Prioritize bringing the meeting pass card smoothly into full view
+      const timer = setTimeout(() => {
+        if (meetingPassRef.current && scrollRef.current) {
+          const containerRect = scrollRef.current.getBoundingClientRect();
+          const passRect = meetingPassRef.current.getBoundingClientRect();
+          const targetOffset =
+            passRect.top - containerRect.top + scrollRef.current.scrollTop - 12;
+          scrollRef.current.scrollTo({
+            top: Math.max(0, targetOffset),
+            behavior: "smooth",
+          });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    } else if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, latestBooking, meetingPass]);
@@ -68,38 +88,51 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   return (
     <div className="transcript-card">
       <div className="transcript-header">
-        <span className="transcript-title">Live Conversation Stream</span>
-        <span className="transcript-badge">
-          {conversationalMessages.length} {conversationalMessages.length === 1 ? "turn" : "turns"}
+        <span className="transcript-title">
+          {meetingPass ? "Live Stream & Meeting Pass" : "Live Conversation Stream"}
         </span>
+        <div className="transcript-header-badges">
+          {meetingPass && (
+            <span className="transcript-badge badge-confirmed">
+              Confirmed
+            </span>
+          )}
+          <span className="transcript-badge">
+            {conversationalMessages.length} {conversationalMessages.length === 1 ? "turn" : "turns"}
+          </span>
+        </div>
       </div>
 
       <div className="transcript-body" ref={scrollRef}>
-        {conversationalMessages.length === 0 ? (
+        {showEmptyState && (
           <div className="transcript-empty">
             <MessageSquare size={36} strokeWidth={1.5} color="#475569" />
             <p>Ready to converse. Start the call to speak with the BrainCX voice representative.</p>
           </div>
-        ) : (
-          conversationalMessages.map((msg) => {
-            const isAssistant = msg.role === "assistant";
-
-            return (
-              <div
-                key={msg.id}
-                className={`chat-bubble ${isAssistant ? "assistant" : "user"}`}
-              >
-                <span className={`bubble-sender ${isAssistant ? "assistant" : ""}`}>
-                  {isAssistant ? "BrainCX Representative" : "You"}
-                </span>
-                <div className="bubble-text">{renderMessageText(msg.text)}</div>
-              </div>
-            );
-          })
         )}
 
+        {conversationalMessages.map((msg) => {
+          const isAssistant = msg.role === "assistant";
+
+          return (
+            <div
+              key={msg.id}
+              className={`chat-bubble ${isAssistant ? "assistant" : "user"}`}
+            >
+              <span className={`bubble-sender ${isAssistant ? "assistant" : ""}`}>
+                {isAssistant ? "BrainCX Representative" : "You"}
+              </span>
+              <div className="bubble-text">{renderMessageText(msg.text)}</div>
+            </div>
+          );
+        })}
+
         {/* Priority: Interactive Meeting Pass Card */}
-        {meetingPass && <MeetingPassCard pass={meetingPass} />}
+        {meetingPass && (
+          <div ref={meetingPassRef} className="meeting-pass-wrapper">
+            <MeetingPassCard pass={meetingPass} />
+          </div>
+        )}
 
         {/* Fallback Legacy Booking Banner if meetingPass not set */}
         {!meetingPass && latestBooking && (
@@ -117,5 +150,3 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
     </div>
   );
 };
-
-
