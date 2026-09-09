@@ -178,7 +178,7 @@ def process_single_tool_call(tool_call: dict, service: GoogleCalendarService) ->
                     "event_id": book_resp.event_id,
                     "reason": book_resp.reason,
                     "message": (
-                        f"Meeting successfully booked on Google Calendar for {req.name} ({req.email}) at {book_resp.start}. Event ID: {book_resp.event_id}."
+                        f"Meeting successfully booked on Google Calendar for {req.name} ({req.email}) at {book_resp.start}. Event ID: {book_resp.event_id}. Inform the visitor that the meeting is confirmed, their pass and Google Meet link are ready on their screen, and the invite has been sent to their email. Do NOT vocalize or read out the meet_url out loud."
                         if book_resp.success
                         else f"Booking failed: {book_resp.message} (reason: {book_resp.reason})."
                     ),

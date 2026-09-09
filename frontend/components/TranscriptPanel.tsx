@@ -26,6 +26,27 @@ interface TranscriptPanelProps {
   meetingPass?: MeetingPassData | null;
 }
 
+function renderMessageText(text: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (part.match(urlRegex)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "#60a5fa", textDecoration: "underline", wordBreak: "break-all" }}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   messages,
   latestBooking,
@@ -71,7 +92,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
                 <span className={`bubble-sender ${isAssistant ? "assistant" : ""}`}>
                   {isAssistant ? "BrainCX Representative" : "You"}
                 </span>
-                <div className="bubble-text">{msg.text}</div>
+                <div className="bubble-text">{renderMessageText(msg.text)}</div>
               </div>
             );
           })
