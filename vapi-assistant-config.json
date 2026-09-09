@@ -63,11 +63,11 @@
               },
               "start": {
                 "type": "string",
-                "description": "ISO 8601 start timestamp for the meeting slot (e.g. '2026-09-15T10:00:00+08:00')"
+                "description": "ISO 8601 start timestamp for the meeting slot matching the visitor's requested timezone offset (e.g. '2026-09-11T10:00:00+08:00' for Asia/Manila, '2026-09-11T10:00:00-04:00' for America/New_York). Do NOT use US Pacific -07:00 unless the visitor is in Pacific time."
               },
               "end": {
                 "type": "string",
-                "description": "ISO 8601 end timestamp for the meeting slot (e.g. '2026-09-15T10:30:00+08:00')"
+                "description": "ISO 8601 end timestamp for the meeting slot matching the visitor's requested timezone offset (e.g. '2026-09-11T10:30:00+08:00' for Asia/Manila)."
               }
             },
             "required": ["name", "email", "timezone", "start", "end"]

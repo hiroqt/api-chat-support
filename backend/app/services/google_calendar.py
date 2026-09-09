@@ -291,8 +291,20 @@ class GoogleCalendarService:
             end_dt = _parse_iso(end_iso)
             if start_dt.tzinfo is None:
                 start_dt = start_dt.replace(tzinfo=tz)
+            else:
+                expected_offset = tz.utcoffset(start_dt.replace(tzinfo=None))
+                if start_dt.utcoffset() != expected_offset:
+                    start_dt = start_dt.replace(tzinfo=None).replace(tzinfo=tz)
+
             if end_dt.tzinfo is None:
                 end_dt = end_dt.replace(tzinfo=tz)
+            else:
+                expected_offset = tz.utcoffset(end_dt.replace(tzinfo=None))
+                if end_dt.utcoffset() != expected_offset:
+                    end_dt = end_dt.replace(tzinfo=None).replace(tzinfo=tz)
+
+            if end_dt <= start_dt:
+                end_dt = start_dt + timedelta(minutes=settings.MEETING_DURATION_MINUTES)
         except Exception as e:
             return BookingResponse(
                 success=False,

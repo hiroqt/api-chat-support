@@ -296,3 +296,64 @@ def test_date_normalization_relative_days(client: TestClient):
     tomorrow = normalize_target_date("tomorrow")
     expected_tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     assert tomorrow == expected_tomorrow
+
+
+def test_voice_email_transcription_whitespace_cleaning(client: TestClient):
+    """Verify that transcription artifacts like 'hr. is172025@gmail.com' are cleaned to 'hr.is172025@gmail.com'."""
+    from app.schemas.calendar import BookingRequest
+    req = BookingRequest.model_validate({
+        "name": "Arnel",
+        "email": "hr. is172025@gmail.com",
+        "timezone": "Asia/Manila",
+        "start": "2026-09-11T10:00:00+08:00",
+        "end": "2026-09-11T10:30:00+08:00",
+    })
+    assert req.email == "hr.is172025@gmail.com"
+
+
+def test_timezone_offset_reconciliation_pdt_to_manila(client: TestClient):
+    """
+    Verify that if the voice LLM sends a timestamp with its default server offset (-07:00 PDT)
+    for an Asia/Manila meeting (e.g. 10:00 AM or 17:30), the backend reconciles the offset
+    to +08:00 rather than shifting the user's intended hour by 15 hours.
+    """
+    from app.schemas.calendar import BookingRequest
+    # 10:00 AM requested with -07:00 attached by foreign server
+    req_10am = BookingRequest.model_validate({
+        "name": "Arnel",
+        "email": "hr. is172025@gmail.com",
+        "timezone": "Asia/Manila",
+        "start": "2026-09-11T10:00:00-07:00",
+        "end": "2026-09-11T10:30:00-07:00",
+    })
+    assert req_10am.start == "2026-09-11T10:00:00+08:00"
+    assert req_10am.end == "2026-09-11T10:30:00+08:00"
+
+    # 5:30 PM requested with -07:00 attached by foreign server
+    req_530pm = BookingRequest.model_validate({
+        "name": "Arnel",
+        "email": "arnel@example.com",
+        "timezone": "Asia/Manila",
+        "start": "2026-09-11T17:30:00-07:00",
+        "end": "2026-09-11T18:00:00-07:00",
+    })
+    assert req_530pm.start == "2026-09-11T17:30:00+08:00"
+    assert req_530pm.end == "2026-09-11T18:00:00+08:00"
+
+
+def test_booking_with_voice_transcript_payload(client: TestClient):
+    """Verify direct end-to-end booking of the exact user transcript flow."""
+    payload = {
+        "name": "Arnel",
+        "email": "hr. is172025@gmail.com",
+        "timezone": "Asia/Manila",
+        "start": "2026-09-11T10:00:00-07:00",
+        "end": "2026-09-11T10:30:00-07:00",
+    }
+    response = client.post("/api/calendar/book", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["start"] == "2026-09-11T10:00:00+08:00"
+    assert data["meeting_pass"]["visitor_formatted_time"].startswith("Friday, Sep 11, 2026 • 10:00 AM")
+

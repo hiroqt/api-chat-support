@@ -218,6 +218,17 @@ class BookingRequest(BaseModel):
             raise ValueError("Name must be at least 2 characters.")
         return cleaned
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def clean_email(cls, v: Any) -> str:
+        if not v:
+            raise ValueError("Email is required.")
+        cleaned = str(v).strip().lower()
+        # Voice transcription artifacts: remove whitespace between characters, e.g. "hr. is172025@gmail.com" -> "hr.is172025@gmail.com"
+        import re
+        cleaned = re.sub(r"\s+", "", cleaned)
+        return cleaned
+
     @field_validator("timezone", mode="before")
     @classmethod
     def validate_timezone(cls, v: Any) -> str:
@@ -233,6 +244,11 @@ class BookingRequest(BaseModel):
     @model_validator(mode="after")
     def validate_time_range(self) -> "BookingRequest":
         try:
+            target_tz = ZoneInfo(self.timezone)
+        except Exception:
+            target_tz = ZoneInfo("Asia/Manila")
+
+        try:
             clean_start = self.start.replace("Z", "+00:00") if self.start.endswith("Z") else self.start
             start_dt = datetime.fromisoformat(clean_start)
         except Exception:
@@ -244,9 +260,26 @@ class BookingRequest(BaseModel):
         except Exception:
             raise ValueError("Invalid ISO datetime format for 'end'.")
 
+        # Re-anchor to declared visitor timezone if naive or if foreign offset was attached by voice model
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=target_tz)
+        else:
+            expected_offset = target_tz.utcoffset(start_dt.replace(tzinfo=None))
+            if start_dt.utcoffset() != expected_offset:
+                start_dt = start_dt.replace(tzinfo=None).replace(tzinfo=target_tz)
+
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=target_tz)
+        else:
+            expected_offset = target_tz.utcoffset(end_dt.replace(tzinfo=None))
+            if end_dt.utcoffset() != expected_offset:
+                end_dt = end_dt.replace(tzinfo=None).replace(tzinfo=target_tz)
+
         if end_dt <= start_dt:
             raise ValueError("'end' datetime must be strictly after 'start' datetime.")
 
+        self.start = start_dt.isoformat()
+        self.end = end_dt.isoformat()
         return self
 
 
