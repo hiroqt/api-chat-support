@@ -40,9 +40,13 @@ async def verify_vapi_auth(
             if parts[1] == settings.VAPI_SECRET_TOKEN.strip():
                 return True
 
-    logger.warning("Rejected unauthorized tool call: invalid or missing Vapi authentication credentials.")
+    logger.warning(
+        f"Rejected unauthorized tool call: invalid or missing Vapi authentication credentials. "
+        f"(Has X-Vapi-Secret header: {bool(x_vapi_secret)}, Has Authorization header: {bool(authorization)})"
+    )
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized: Missing or invalid Vapi secret token.",
+        detail="Unauthorized: Missing or invalid Vapi secret token. Please configure X-Vapi-Secret header in Vapi.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+

@@ -25,35 +25,80 @@ router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 def extract_vapi_tool_calls(body: dict) -> Optional[List[dict]]:
     """
     Detect if the incoming request payload follows Vapi's webhook/tool-calls format.
-    Supports both Vapi 'tool-calls' array and legacy 'functionCall' single objects.
+    Supports Vapi 'tool-calls', 'toolWithToolCallList', 'functionCall', and nested message wrappers.
     """
     if not isinstance(body, dict):
         return None
 
+    # 1. Top-level checks
+    if "toolCalls" in body and isinstance(body["toolCalls"], list):
+        return body["toolCalls"]
+    if "toolCallList" in body and isinstance(body["toolCallList"], list):
+        return body["toolCallList"]
+    if "toolWithToolCallList" in body and isinstance(body["toolWithToolCallList"], list):
+        calls = []
+        for item in body["toolWithToolCallList"]:
+            if isinstance(item, dict) and "toolCall" in item:
+                calls.append(item["toolCall"])
+            elif isinstance(item, dict):
+                calls.append(item)
+        if calls:
+            return calls
+    if "toolCall" in body and isinstance(body["toolCall"], dict):
+        return [body["toolCall"]]
+
+    # 2. Wrapped in "message"
     if "message" in body and isinstance(body["message"], dict):
         msg = body["message"]
-        if msg.get("type") == "tool-calls" and "toolCalls" in msg:
-            return msg["toolCalls"]
         if "toolCalls" in msg and isinstance(msg["toolCalls"], list):
             return msg["toolCalls"]
-        if "functionCall" in msg:
+        if "toolCallList" in msg and isinstance(msg["toolCallList"], list):
+            return msg["toolCallList"]
+        if "toolWithToolCallList" in msg and isinstance(msg["toolWithToolCallList"], list):
+            calls = []
+            for item in msg["toolWithToolCallList"]:
+                if isinstance(item, dict) and "toolCall" in item:
+                    calls.append(item["toolCall"])
+                elif isinstance(item, dict):
+                    calls.append(item)
+            if calls:
+                return calls
+        if "toolCall" in msg and isinstance(msg["toolCall"], dict):
+            return [msg["toolCall"]]
+        if "functionCall" in msg and isinstance(msg["functionCall"], dict):
             return [{
-                "id": "call_default",
+                "id": msg.get("toolCallId") or "call_default",
                 "function": msg["functionCall"],
             }]
 
-    if "toolCalls" in body and isinstance(body["toolCalls"], list):
-        return body["toolCalls"]
+    # 3. Direct functionCall at root
+    if "functionCall" in body and isinstance(body["functionCall"], dict):
+        return [{
+            "id": body.get("toolCallId") or "call_default",
+            "function": body["functionCall"],
+        }]
 
     return None
 
 
 def process_single_tool_call(tool_call: dict, service: GoogleCalendarService) -> dict:
     """Process an individual tool call from Vapi and return the toolCallId/result object."""
-    tool_id = tool_call.get("id", "call_default")
-    fn = tool_call.get("function", {})
-    fn_name = fn.get("name")
-    args = fn.get("arguments", {})
+    tool_id = tool_call.get("id") or tool_call.get("toolCallId") or "call_default"
+    fn = tool_call.get("function") or tool_call
+    fn_name = fn.get("name") or tool_call.get("name")
+
+    args = (
+        fn.get("arguments")
+        if fn.get("arguments") is not None
+        else fn.get("parameters")
+        if fn.get("parameters") is not None
+        else tool_call.get("parameters")
+        if tool_call.get("parameters") is not None
+        else tool_call.get("arguments")
+    )
+
+    if args is None:
+        args = {}
 
     if isinstance(args, str):
         try:
@@ -61,7 +106,15 @@ def process_single_tool_call(tool_call: dict, service: GoogleCalendarService) ->
         except Exception:
             args = {}
 
+    # Auto-detect function name if missing from arguments structure
+    if not fn_name:
+        if "date" in args:
+            fn_name = "check_availability"
+        elif "start" in args and "end" in args:
+            fn_name = "book_meeting"
+
     logger.info(f"Processing Vapi tool-call: id={tool_id}, name={fn_name}, args={args}")
+
 
     if fn_name == "check_availability":
         try:
