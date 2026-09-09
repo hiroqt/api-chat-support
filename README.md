@@ -37,6 +37,7 @@ Google Calendar API (Authoritative Truth)
 - **Natural Voice Experience**: Sub-300ms latency, turn-taking, fluid interruption handling, silence tolerance, and friction-free email/date corrections.
 - **Deterministic Google Calendar Availability**: Generates valid 30-minute meeting slots during business hours (9:00 AM – 5:00 PM) in any requested IANA timezone (e.g., `Asia/Manila`, `America/New_York`).
 - **Mandatory Pre-Booking Re-Check**: Before inserting any calendar event, the backend re-verifies that the selected slot remains unbooked, preventing race conditions or double-bookings.
+- **Interactive Real-Time Meeting Pass**: Synchronously manifests an enterprise-grade confirmation hub upon booking, featuring Google Meet room launch, dual-timezone display (Visitor Local Time vs. BrainCX West Palm Beach FL HQ), 1-click RFC 5545 `.ics` download, Google Calendar sync, and instant confirmation re-dispatch.
 - **Refined Enterprise Design**: Clean dark aesthetic avoiding flashy AI slop, rainbow gradients, and gimmicky eyebrow pills.
 
 ---
@@ -255,6 +256,37 @@ Reserves a verified slot in Google Calendar.
   "success": false,
   "reason": "TIME_UNAVAILABLE",
   "message": "The requested time slot was just taken. Please choose another available time."
+}
+```
+
+### `GET /api/calendar/event/{event_id}.ics`
+Streams an RFC 5545 compliant `.ics` iCalendar attachment for 1-click import into macOS Calendar, Google Calendar, Apple Calendar, or Outlook.
+**Response Header**:
+```http
+Content-Type: text/calendar; charset=utf-8
+Content-Disposition: attachment; filename="braincx-meeting-{event_id}.ics"
+```
+
+### `GET /api/calendar/event/{event_id}`
+Returns complete structured `MeetingPassDetails` including dual-timezone calculations (`visitor_formatted_time` and `braincx_formatted_time`), Google Meet URL, and direct Google Calendar URLs.
+
+### `POST /api/calendar/resend-confirmation`
+Re-dispatches booking confirmation email and calendar invitation to attendee.
+**Request**:
+```json
+{
+  "event_id": "google_event_id_xyz",
+  "email": "jane.smith@example.com"
+}
+```
+**Response**:
+```json
+{
+  "success": true,
+  "event_id": "google_event_id_xyz",
+  "email": "jane.smith@example.com",
+  "message": "Confirmation email and calendar invitation successfully resent to jane.smith@example.com.",
+  "dispatched_at": "2026-09-10T04:15:00Z"
 }
 ```
 

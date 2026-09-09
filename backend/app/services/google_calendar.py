@@ -10,7 +10,12 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from app.core.config import settings
-from app.schemas.calendar import AvailabilityResponse, BookingResponse, TimeSlot
+from app.schemas.calendar import (
+    AvailabilityResponse,
+    BookingResponse,
+    MeetingPassDetails,
+    TimeSlot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +26,90 @@ def _parse_iso(iso_str: str) -> datetime:
     return datetime.fromisoformat(clean_str)
 
 
+def format_dual_timezone(start_dt: datetime, end_dt: datetime, visitor_tz_str: str) -> Tuple[str, str]:
+    """Format meeting window in visitor timezone and BrainCX HQ (America/New_York) timezone."""
+    visitor_tz = ZoneInfo(visitor_tz_str)
+    hq_tz = ZoneInfo("America/New_York")
+
+    start_v = start_dt.astimezone(visitor_tz)
+    end_v = end_dt.astimezone(visitor_tz)
+
+    start_hq = start_dt.astimezone(hq_tz)
+    end_hq = end_dt.astimezone(hq_tz)
+
+    visitor_str = f"{start_v.strftime('%A, %b %d, %Y • %I:%M %p')} – {end_v.strftime('%I:%M %p')} ({visitor_tz_str})"
+    hq_str = f"{start_hq.strftime('%A, %b %d, %Y • %I:%M %p')} – {end_hq.strftime('%I:%M %p')} (America/New_York)"
+    return visitor_str, hq_str
+
+
+def build_calendar_urls(title: str, description: str, meet_url: str, start_dt: datetime, end_dt: datetime) -> Tuple[str, str]:
+    """Build direct web links to add to Google Calendar and Outlook."""
+    import urllib.parse
+    start_utc = start_dt.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+    end_utc = end_dt.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+
+    gcal_params = {
+        "action": "TEMPLATE",
+        "text": title,
+        "dates": f"{start_utc}/{end_utc}",
+        "details": description,
+        "location": meet_url or "Google Meet Video Room",
+    }
+    gcal_url = f"https://calendar.google.com/calendar/render?{urllib.parse.urlencode(gcal_params)}"
+
+    outlook_params = {
+        "path": "/calendar/action/compose",
+        "rru": "addevent",
+        "subject": title,
+        "startdt": start_utc,
+        "enddt": end_utc,
+        "body": description,
+        "location": meet_url or "Google Meet Video Room",
+    }
+    outlook_url = f"https://outlook.live.com/calendar/0/deeplink/compose?{urllib.parse.urlencode(outlook_params)}"
+    return gcal_url, outlook_url
+
+
+def generate_ics_content(meeting_pass: MeetingPassDetails) -> str:
+    """Generate an RFC 5545 compliant .ics calendar file content."""
+    start_dt = _parse_iso(meeting_pass.start_iso)
+    end_dt = _parse_iso(meeting_pass.end_iso)
+    now_utc = datetime.now(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+    start_utc = start_dt.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+    end_utc = end_dt.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+    meet = meeting_pass.meet_url or "https://meet.google.com"
+
+    return (
+        "BEGIN:VCALENDAR\r\n"
+        "VERSION:2.0\r\n"
+        "PRODID:-//BrainCX Inc//BrainCX Voice Representative//EN\r\n"
+        "CALSCALE:GREGORIAN\r\n"
+        "METHOD:REQUEST\r\n"
+        "BEGIN:VEVENT\r\n"
+        f"UID:{meeting_pass.event_id}@braincx.com\r\n"
+        f"DTSTAMP:{now_utc}\r\n"
+        f"DTSTART:{start_utc}\r\n"
+        f"DTEND:{end_utc}\r\n"
+        f"SUMMARY:{meeting_pass.title}\r\n"
+        f"DESCRIPTION:BrainCX Discovery Call with {meeting_pass.name}\\n\\nJoin Video Room: {meet}\\n\\nPowered by AI, managed by BrainCX.\\nWest Palm Beach, Florida.\r\n"
+        f"LOCATION:{meet}\r\n"
+        "STATUS:CONFIRMED\r\n"
+        "ORGANIZER;CN=BrainCX Executive Team:mailto:team@braincx.com\r\n"
+        f"ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN={meeting_pass.name}:mailto:{meeting_pass.email}\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR\r\n"
+    )
+
+
 class GoogleCalendarService:
     """Service handling Google Calendar authentication, slot generation, and event booking."""
 
     def __init__(self):
         self._client: Optional[Any] = None
         self._mock_events: List[Dict[str, Any]] = []
+        self._events_cache: Dict[str, MeetingPassDetails] = {}
         self._booking_lock = threading.Lock()
+
 
 
     def _get_client(self) -> Optional[Any]:
@@ -299,12 +381,22 @@ class GoogleCalendarService:
                             meet_link = entry_points[0].get("uri")
 
                     logger.info(f"Successfully created Google Calendar event: {event_id}, meet_link={meet_link}")
+                    pass_details = self._create_meeting_pass(
+                        event_id=event_id,
+                        name=name,
+                        email=email,
+                        tz_str=tz_str,
+                        start_dt=start_dt,
+                        end_dt=end_dt,
+                        meet_url=meet_link,
+                    )
                     return BookingResponse(
                         success=True,
                         event_id=event_id,
                         start=start_iso,
                         end=end_iso,
                         meet_url=meet_link,
+                        meeting_pass=pass_details,
                         message=f"Meeting successfully booked for {name}.",
                     )
                 except HttpError as http_err:
@@ -342,6 +434,15 @@ class GoogleCalendarService:
                     "end": end_dt,
                     "summary": f"BrainCX Discovery Call - {name}",
                 })
+                pass_details = self._create_meeting_pass(
+                    event_id=mock_id,
+                    name=name,
+                    email=email,
+                    tz_str=tz_str,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                    meet_url=mock_meet,
+                )
                 logger.info(f"Mock calendar event created: {mock_id} for {name} ({email})")
                 return BookingResponse(
                     success=True,
@@ -349,8 +450,56 @@ class GoogleCalendarService:
                     start=start_iso,
                     end=end_iso,
                     meet_url=mock_meet,
+                    meeting_pass=pass_details,
                     message=f"Meeting successfully booked for {name} (Mock Mode).",
                 )
+
+    def _create_meeting_pass(
+        self,
+        event_id: str,
+        name: str,
+        email: str,
+        tz_str: str,
+        start_dt: datetime,
+        end_dt: datetime,
+        meet_url: Optional[str],
+    ) -> MeetingPassDetails:
+        title = f"BrainCX Discovery Call - {name}"
+        desc = (
+            f"BrainCX Discovery Call with {name} ({email})\n\n"
+            f"Google Meet Video Room: {meet_url or 'https://meet.google.com'}\n\n"
+            "BrainCX: The AI CX Operator for high consequence verticals.\n"
+            "Powered by AI, managed by BrainCX."
+        )
+        visitor_str, hq_str = format_dual_timezone(start_dt, end_dt, tz_str)
+        gcal_url, _ = build_calendar_urls(title, desc, meet_url or "", start_dt, end_dt)
+        ics_url = f"/api/calendar/event/{event_id}.ics"
+
+        pass_details = MeetingPassDetails(
+            event_id=event_id,
+            title=title,
+            name=name,
+            email=email,
+            start_iso=start_dt.isoformat(),
+            end_iso=end_dt.isoformat(),
+            visitor_timezone=tz_str,
+            visitor_formatted_time=visitor_str,
+            braincx_timezone="America/New_York",
+            braincx_formatted_time=hq_str,
+            meet_url=meet_url,
+            google_calendar_url=gcal_url,
+            ics_download_url=ics_url,
+            status="confirmed",
+            invites_dispatched=True,
+            organizer="BrainCX Executive Team <team@braincx.com>",
+        )
+        self._events_cache[event_id] = pass_details
+        return pass_details
+
+    def get_meeting_pass(self, event_id: str) -> Optional[MeetingPassDetails]:
+        """Retrieve cached or stored meeting pass for an event ID."""
+        return self._events_cache.get(event_id)
+
 
 
     def add_mock_busy_slot(self, start_dt: datetime, end_dt: datetime):

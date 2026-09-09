@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { MessageSquare, CalendarCheck, Wrench } from "lucide-react";
+import { MeetingPassCard, MeetingPassData } from "./MeetingPassCard";
 
 export interface MessageTurn {
   id: string;
@@ -21,12 +22,14 @@ export interface BookingDetails {
 
 interface TranscriptPanelProps {
   messages: MessageTurn[];
-  latestBooking: BookingDetails | null;
+  latestBooking?: BookingDetails | null;
+  meetingPass?: MeetingPassData | null;
 }
 
 export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   messages,
   latestBooking,
+  meetingPass,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -34,7 +37,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, latestBooking]);
+  }, [messages, latestBooking, meetingPass]);
 
   return (
     <div className="transcript-card">
@@ -78,7 +81,11 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
           })
         )}
 
-        {latestBooking && (
+        {/* Priority: Interactive Meeting Pass Card */}
+        {meetingPass && <MeetingPassCard pass={meetingPass} />}
+
+        {/* Fallback Legacy Booking Banner if meetingPass not set */}
+        {!meetingPass && latestBooking && (
           <div className="booking-banner">
             <div className="booking-banner-title">
               <CalendarCheck size={18} />
@@ -93,3 +100,4 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
     </div>
   );
 };
+

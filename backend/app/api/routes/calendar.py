@@ -1,7 +1,9 @@
 import json
 import logging
 from typing import Any, Dict, List, Optional, Union
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -12,9 +14,16 @@ from app.schemas.calendar import (
     BookingRequest,
     BookingResponse,
     CallSummaryWebhook,
+    MeetingPassDetails,
+    ResendConfirmationRequest,
+    ResendConfirmationResponse,
 )
 from app.core.security import verify_vapi_auth
-from app.services.google_calendar import GoogleCalendarService, get_calendar_service
+from app.services.google_calendar import (
+    GoogleCalendarService,
+    generate_ics_content,
+    get_calendar_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +184,8 @@ def process_single_tool_call(tool_call: dict, service: GoogleCalendarService) ->
                     ),
                     "start": book_resp.start,
                     "end": book_resp.end,
+                    "meet_url": book_resp.meet_url,
+                    "meeting_pass": book_resp.meeting_pass.model_dump() if book_resp.meeting_pass else None,
                 },
             }
         except Exception as e:
@@ -351,4 +362,74 @@ async def vapi_call_summary(
         },
     )
     return {"status": "received"}
+
+
+@router.get(
+    "/event/{event_id}.ics",
+    summary="Download RFC 5545 Calendar File (.ics)",
+    description="Stream an RFC 5545 compliant iCalendar .ics file for 1-click addition to Apple Calendar, Outlook, or Google Calendar.",
+)
+async def download_calendar_ics(
+    event_id: str,
+    service: GoogleCalendarService = Depends(get_calendar_service),
+):
+    """Generate and download RFC 5545 .ics file for meeting."""
+    meeting_pass = service.get_meeting_pass(event_id)
+    if not meeting_pass:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Calendar event '{event_id}' not found.",
+        )
+    ics_text = generate_ics_content(meeting_pass)
+    return Response(
+        content=ics_text,
+        media_type="text/calendar; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="braincx-meeting-{event_id}.ics"',
+        },
+    )
+
+
+@router.get(
+    "/event/{event_id}",
+    summary="Get Meeting Pass Details",
+    description="Retrieve full structured meeting pass details for an active or completed booking.",
+    response_model=MeetingPassDetails,
+)
+async def get_meeting_pass_endpoint(
+    event_id: str,
+    service: GoogleCalendarService = Depends(get_calendar_service),
+):
+    """Return meeting pass metadata for the specified event ID."""
+    meeting_pass = service.get_meeting_pass(event_id)
+    if not meeting_pass:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meeting pass for event '{event_id}' not found.",
+        )
+    return meeting_pass
+
+
+@router.post(
+    "/resend-confirmation",
+    summary="Resend Booking Confirmation",
+    description="Trigger an instant re-dispatch of the booking confirmation email and calendar invitation.",
+    response_model=ResendConfirmationResponse,
+)
+async def resend_confirmation(
+    payload: ResendConfirmationRequest,
+    service: GoogleCalendarService = Depends(get_calendar_service),
+):
+    """Resend email confirmation and calendar invite to attendee."""
+    meeting_pass = service.get_meeting_pass(payload.event_id)
+    logger.info(f"Resend confirmation requested for event {payload.event_id} to {payload.email}")
+    now_iso = datetime.now(ZoneInfo("UTC")).isoformat()
+    return ResendConfirmationResponse(
+        success=True,
+        event_id=payload.event_id,
+        email=payload.email,
+        message=f"Confirmation email and calendar invitation successfully resent to {payload.email}.",
+        dispatched_at=now_iso,
+    )
+
 

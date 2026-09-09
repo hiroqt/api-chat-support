@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { BrandHeader } from "@/components/BrandHeader";
 import { VoiceWidget } from "@/components/VoiceWidget";
 import { TranscriptPanel, MessageTurn, BookingDetails } from "@/components/TranscriptPanel";
+import { MeetingPassData } from "@/components/MeetingPassCard";
 
 export default function HomePage() {
   const [callStatus, setCallStatus] = useState<
@@ -12,6 +13,7 @@ export default function HomePage() {
 
   const [messages, setMessages] = useState<MessageTurn[]>([]);
   const [latestBooking, setLatestBooking] = useState<BookingDetails | null>(null);
+  const [meetingPass, setMeetingPass] = useState<MeetingPassData | null>(null);
 
   const handleNewMessage = (msg: MessageTurn) => {
     setMessages((prev) => [...prev, msg]);
@@ -32,12 +34,14 @@ export default function HomePage() {
               status={callStatus}
               setStatus={setCallStatus}
               onNewMessage={handleNewMessage}
+              onMeetingPassUpdated={setMeetingPass}
               onBookingConfirmed={handleBookingConfirmed}
             />
 
             <TranscriptPanel
               messages={messages}
               latestBooking={latestBooking}
+              meetingPass={meetingPass}
             />
           </div>
         </div>

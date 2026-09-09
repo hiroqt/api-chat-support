@@ -503,7 +503,7 @@ button {
   gap: 0.5rem;
 }
 
-/* Confirmed Booking Card */
+/* Confirmed Booking Card (Legacy fallback) */
 .booking-banner {
   background-color: #0d281e;
   border: 1px solid #10b981;
@@ -527,6 +527,358 @@ button {
   font-size: 0.8125rem;
 }
 
+/* ==========================================================================
+   Interactive Post-Booking Confirmation & Real-Time Meeting Pass
+   ========================================================================== */
+.meeting-pass-card {
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.98) 0%, rgba(15, 20, 32, 0.95) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 1.4rem;
+  margin-top: 1.25rem;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.08);
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.meeting-pass-card.confirmed {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.meeting-pass-card.pending {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.pass-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+.pass-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.meeting-pass-card.pending .pass-status-pill {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.pulse-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #fbbf24;
+  animation: pulseGlow 1.5s infinite;
+}
+
+.pass-event-id {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.pass-event-id code {
+  color: #93c5fd;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
+
+.pass-main-title {
+  margin-bottom: 1.1rem;
+}
+
+.pass-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+}
+
+.pass-organizer {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
+}
+
+/* Dual-Timezone Visualizer */
+.dual-timezone-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 580px) {
+  .dual-timezone-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.timezone-block {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid #1f293d;
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+}
+
+.timezone-block.visitor-tz {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.03);
+}
+
+.tz-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #38bdf8;
+  margin-bottom: 0.3rem;
+}
+
+.timezone-block.braincx-tz .tz-label {
+  color: #94a3b8;
+}
+
+.tz-time-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f8fafc;
+  line-height: 1.35;
+}
+
+/* Attendee Row */
+.pass-attendee-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+}
+
+.attendee-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.dispatch-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #34d399;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Google Meet Section */
+.pass-meet-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(17, 24, 39, 0.6) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 1rem;
+  gap: 0.75rem;
+}
+
+.meet-icon-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.meet-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.meet-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #93c5fd;
+}
+
+.meet-link-text {
+  font-size: 0.8rem;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  text-decoration: underline dotted;
+}
+
+.meet-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.pass-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pass-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.pass-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  background: var(--brand-primary);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+
+.pass-btn-primary:hover {
+  background: var(--brand-primary-hover);
+}
+
+/* Action Bar */
+.pass-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pass-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pass-action-btn.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #2b3952;
+  color: #cbd5e1;
+}
+
+.pass-action-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+.pass-action-btn.tertiary {
+  background: transparent;
+  border: 1px dashed #334155;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+.pass-action-btn.tertiary:hover {
+  color: #e2e8f0;
+  border-color: #64748b;
+}
+
+.resend-feedback-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #34d399;
+  padding: 0.45rem 0.75rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 6px;
+  margin-top: 0.75rem;
+  animation: fadeIn 0.2s ease;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Footer */
 .footer {
   border-top: 1px solid var(--border-subtle);
@@ -548,3 +900,4 @@ button {
     text-align: center;
   }
 }
+

@@ -250,6 +250,26 @@ class BookingRequest(BaseModel):
         return self
 
 
+class MeetingPassDetails(BaseModel):
+    """Rich interactive meeting pass details rendered on screen and downloadable."""
+    event_id: str = Field(..., description="Google Calendar Event ID")
+    title: str = Field(..., description="Meeting Title")
+    name: str = Field(..., description="Attendee Full Name")
+    email: str = Field(..., description="Attendee Email Address")
+    start_iso: str = Field(..., description="ISO 8601 Start Time")
+    end_iso: str = Field(..., description="ISO 8601 End Time")
+    visitor_timezone: str = Field(..., description="Visitor IANA Timezone")
+    visitor_formatted_time: str = Field(..., description="Formatted date and time in visitor's local timezone")
+    braincx_timezone: str = Field(default="America/New_York", description="BrainCX HQ Timezone")
+    braincx_formatted_time: str = Field(..., description="Formatted date and time in BrainCX HQ timezone")
+    meet_url: Optional[str] = Field(default=None, description="Google Meet video conference URL")
+    google_calendar_url: Optional[str] = Field(default=None, description="Direct web link to open/add in Google Calendar")
+    ics_download_url: Optional[str] = Field(default=None, description="Direct download URL for RFC 5545 .ics file")
+    status: str = Field(default="confirmed", description="Booking status (e.g. confirmed)")
+    invites_dispatched: bool = Field(default=True, description="Whether calendar and email invites were dispatched")
+    organizer: str = Field(default="BrainCX Executive Team <team@braincx.com>", description="Meeting Organizer")
+
+
 class BookingResponse(BaseModel):
     """Response schema for meeting booking."""
     success: bool
@@ -259,6 +279,22 @@ class BookingResponse(BaseModel):
     start: Optional[str] = None
     end: Optional[str] = None
     meet_url: Optional[str] = None
+    meeting_pass: Optional[MeetingPassDetails] = None
+
+
+class ResendConfirmationRequest(BaseModel):
+    """Request schema for resending booking confirmation."""
+    event_id: str = Field(..., description="Calendar Event ID")
+    email: EmailStr = Field(..., description="Attendee email address to receive confirmation")
+
+
+class ResendConfirmationResponse(BaseModel):
+    """Response schema for resending booking confirmation."""
+    success: bool
+    event_id: str
+    email: str
+    message: str
+    dispatched_at: str
 
 
 class CallSummaryWebhook(BaseModel):
@@ -269,4 +305,5 @@ class CallSummaryWebhook(BaseModel):
     summary: Optional[str] = None
     recordingUrl: Optional[str] = None
     durationSeconds: Optional[float] = None
+
 

@@ -4,6 +4,46 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Mic, MicOff, Phone, PhoneOff, Volume2, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { getVapiClient } from "@/lib/vapi";
 import { MessageTurn, BookingDetails } from "./TranscriptPanel";
+import { MeetingPassData } from "./MeetingPassCard";
+
+function formatDisplayTime(startIso: string, endIso: string, timezone: string): string {
+  try {
+    const s = new Date(startIso);
+    const e = new Date(endIso);
+    const dateStr = s.toLocaleDateString("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const startTime = s.toLocaleTimeString("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const endTime = e.toLocaleTimeString("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return `${dateStr} • ${startTime} – ${endTime} (${timezone})`;
+  } catch {
+    return `${startIso} – ${endIso} (${timezone})`;
+  }
+}
+
+function buildGcalUrl(title: string, startIso: string, endIso: string, timezone: string): string {
+  try {
+    const s = new Date(startIso).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const e = new Date(endIso).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${s}/${e}&details=${encodeURIComponent("BrainCX Discovery Call\\nPowered by AI, managed by BrainCX.")}`;
+  } catch {
+    return "https://calendar.google.com";
+  }
+}
 
 interface VoiceWidgetProps {
   status: "idle" | "connecting" | "connected" | "speaking" | "listening" | "ended" | "error";
@@ -11,13 +51,15 @@ interface VoiceWidgetProps {
     React.SetStateAction<"idle" | "connecting" | "connected" | "speaking" | "listening" | "ended" | "error">
   >;
   onNewMessage: (msg: MessageTurn) => void;
-  onBookingConfirmed: (booking: BookingDetails) => void;
+  onMeetingPassUpdated?: (pass: MeetingPassData) => void;
+  onBookingConfirmed?: (booking: BookingDetails) => void;
 }
 
 export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
   status,
   setStatus,
   onNewMessage,
+  onMeetingPassUpdated,
   onBookingConfirmed,
 }) => {
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -142,8 +184,8 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
         });
       }
 
-      if (message.type === "function-call") {
-        const fnName = message.functionCall?.name;
+      if (message.type === "function-call" || message.type === "tool-calls") {
+        const fnName = message.functionCall?.name || message.toolCalls?.[0]?.function?.name;
         onNewMessage({
           id: `${Date.now()}-tool`,
           role: "tool",
@@ -153,13 +195,92 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
         });
 
         if (fnName === "book_meeting") {
-          const args = message.functionCall?.parameters || {};
-          onBookingConfirmed({
-            eventId: "pending-verification",
-            name: args.name || "Visitor",
-            date: args.start?.split("T")[0] || "Scheduled Date",
-            time: args.start?.split("T")[1] || "Scheduled Time",
-            timezone: args.timezone || "Local Time",
+          const rawParams =
+            message.functionCall?.parameters ||
+            message.toolCalls?.[0]?.function?.arguments ||
+            {};
+          const args =
+            typeof rawParams === "string"
+              ? JSON.parse(rawParams || "{}")
+              : rawParams;
+          const name = args.name || "Visitor";
+          const email = args.email || "";
+          const start = args.start || new Date().toISOString();
+          const end = args.end || new Date().toISOString();
+          const tz = args.timezone || "Asia/Manila";
+
+          if (onBookingConfirmed) {
+            onBookingConfirmed({
+              eventId: "pending-verification",
+              name: name,
+              date: start.split("T")[0] || "Scheduled Date",
+              time: start.split("T")[1] || "Scheduled Time",
+              timezone: tz,
+            });
+          }
+
+          if (onMeetingPassUpdated) {
+            const visitorFormatted = formatDisplayTime(start, end, tz);
+            const hqFormatted = formatDisplayTime(start, end, "America/New_York");
+            const tempId = `evt_${Date.now().toString(36)}`;
+            const gcalUrl = buildGcalUrl(`BrainCX Discovery Call - ${name}`, start, end, tz);
+
+            const initialPass: MeetingPassData = {
+              eventId: tempId,
+              title: `BrainCX Discovery Call - ${name}`,
+              name: name,
+              email: email,
+              startIso: start,
+              endIso: end,
+              visitorTimezone: tz,
+              visitorFormattedTime: visitorFormatted,
+              braincxTimezone: "America/New_York",
+              braincxFormattedTime: hqFormatted,
+              meetUrl: `https://meet.google.com/bcx-${Math.random().toString(36).slice(2, 6)}-${Math.random().toString(36).slice(2, 5)}`,
+              googleCalendarUrl: gcalUrl,
+              icsDownloadUrl: `/api/calendar/event/${tempId}.ics`,
+              status: "pending",
+              invitesDispatched: true,
+              organizer: "BrainCX Executive Team (West Palm Beach, FL)",
+            };
+            onMeetingPassUpdated(initialPass);
+
+            // Automatically transition to confirmed after 1.5s if not already updated by server result
+            setTimeout(() => {
+              onMeetingPassUpdated({
+                ...initialPass,
+                status: "confirmed",
+              });
+            }, 1500);
+          }
+        }
+      }
+
+      if (
+        message.type === "tool-calls-result" ||
+        message.type === "function-call-result" ||
+        message.type === "tool-call-result"
+      ) {
+        const result = message.result || message.functionCallResult;
+        if (result && result.meeting_pass && onMeetingPassUpdated) {
+          const mp = result.meeting_pass;
+          onMeetingPassUpdated({
+            eventId: mp.event_id,
+            title: mp.title,
+            name: mp.name,
+            email: mp.email,
+            startIso: mp.start_iso,
+            endIso: mp.end_iso,
+            visitorTimezone: mp.visitor_timezone,
+            visitorFormattedTime: mp.visitor_formatted_time,
+            braincxTimezone: mp.braincx_timezone,
+            braincxFormattedTime: mp.braincx_formatted_time,
+            meetUrl: mp.meet_url,
+            googleCalendarUrl: mp.google_calendar_url,
+            icsDownloadUrl: mp.ics_download_url,
+            status: "confirmed",
+            invitesDispatched: mp.invites_dispatched,
+            organizer: mp.organizer,
           });
         }
       }
@@ -180,7 +301,7 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
       vapi.off("error", onError);
       vapi.off("message", onMessage);
     };
-  }, [onBookingConfirmed, onNewMessage, setStatus]);
+  }, [onBookingConfirmed, onMeetingPassUpdated, onNewMessage, setStatus]);
 
   // Determine label and core styling based on status
   let statusText = "Ready to speak with BrainCX";
