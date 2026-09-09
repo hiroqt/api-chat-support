@@ -1,4 +1,5 @@
 import logging
+import threading
 import uuid
 from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -26,6 +27,8 @@ class GoogleCalendarService:
     def __init__(self):
         self._client: Optional[Any] = None
         self._mock_events: List[Dict[str, Any]] = []
+        self._booking_lock = threading.Lock()
+
 
     def _get_client(self) -> Optional[Any]:
         """Authenticate and return Google Calendar API client, or None if credentials missing."""
@@ -215,100 +218,140 @@ class GoogleCalendarService:
                 message=f"Could not parse start or end datetime: {str(e)}",
             )
 
-        # 1. Mandatory re-check: Verify slot availability immediately before event creation
-        if not self.is_slot_available(start_dt, end_dt, tz):
-            logger.warning(f"Booking conflict detected for slot {start_iso} to {end_iso}.")
-            return BookingResponse(
-                success=False,
-                reason="TIME_UNAVAILABLE",
-                message="The requested time slot was just taken. Please choose another available time.",
-                start=start_iso,
-                end=end_iso,
-            )
+        # Acquire lock to prevent race conditions during the check-and-insert window
+        with self._booking_lock:
+            # 1. Mandatory re-check: Verify slot availability immediately before event creation
+            if not self.is_slot_available(start_dt, end_dt, tz):
+                logger.warning(f"Booking conflict detected for slot {start_iso} to {end_iso}.")
+                return BookingResponse(
+                    success=False,
+                    reason="TIME_UNAVAILABLE",
+                    message="The requested time slot was just taken. Please choose another available time.",
+                    start=start_iso,
+                    end=end_iso,
+                )
 
-        client = self._get_client()
+            client = self._get_client()
 
-        if client:
-            try:
-                event_body = {
-                    "summary": f"BrainCX Discovery Call - {name}",
-                    "description": (
-                        f"BrainCX Discovery Call with {name} ({email})\n\n"
-                        "Booked via BrainCX AI Voice Agent.\n"
-                        "BrainCX: The AI CX Operator for high consequence verticals.\n"
-                        "Powered by AI, managed by BrainCX."
-                    ),
-                    "start": {
-                        "dateTime": start_dt.isoformat(),
-                        "timeZone": tz_str,
-                    },
-                    "end": {
-                        "dateTime": end_dt.isoformat(),
-                        "timeZone": tz_str,
-                    },
-                    "attendees": [
-                        {"email": email, "displayName": name},
-                    ],
-                    "reminders": {
-                        "useDefault": True,
-                    },
-                }
+            if client:
+                try:
+                    event_body: Dict[str, Any] = {
+                        "summary": f"BrainCX Discovery Call - {name}",
+                        "description": (
+                            f"BrainCX Discovery Call with {name} ({email})\n\n"
+                            "Booked via BrainCX AI Voice Agent.\n"
+                            "BrainCX: The AI CX Operator for high consequence verticals.\n"
+                            "Powered by AI, managed by BrainCX."
+                        ),
+                        "start": {
+                            "dateTime": start_dt.isoformat(),
+                            "timeZone": tz_str,
+                        },
+                        "end": {
+                            "dateTime": end_dt.isoformat(),
+                            "timeZone": tz_str,
+                        },
+                        "attendees": [
+                            {"email": email, "displayName": name},
+                        ],
+                        "reminders": {
+                            "useDefault": True,
+                        },
+                    }
 
-                created_event = client.events().insert(
-                    calendarId=settings.GOOGLE_CALENDAR_ID,
-                    body=event_body,
-                ).execute()
+                    # Add BrainCX representative organizer attendee if configured
+                    if settings.ORGANIZER_EMAIL:
+                        event_body["attendees"].append({
+                            "email": settings.ORGANIZER_EMAIL,
+                            "displayName": "BrainCX Team",
+                        })
 
-                event_id = created_event.get("id")
-                if not event_id:
-                    logger.error("Google Calendar did not return an event ID.")
+                    # Add Google Meet video conference if enabled
+                    if settings.CREATE_GOOGLE_MEET_LINK:
+                        event_body["conferenceData"] = {
+                            "createRequest": {
+                                "requestId": f"braincx-meet-{uuid.uuid4().hex[:12]}",
+                                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+                            }
+                        }
+
+                    created_event = client.events().insert(
+                        calendarId=settings.GOOGLE_CALENDAR_ID,
+                        body=event_body,
+                        conferenceDataVersion=1 if settings.CREATE_GOOGLE_MEET_LINK else 0,
+                        sendUpdates="all",
+                    ).execute()
+
+                    event_id = created_event.get("id")
+                    if not event_id:
+                        logger.error("Google Calendar did not return an event ID.")
+                        return BookingResponse(
+                            success=False,
+                            reason="CALENDAR_ERROR",
+                            message="Calendar service could not confirm event creation.",
+                        )
+
+                    # Extract Google Meet link if generated
+                    meet_link = created_event.get("hangoutLink")
+                    if not meet_link:
+                        entry_points = created_event.get("conferenceData", {}).get("entryPoints", [])
+                        if entry_points:
+                            meet_link = entry_points[0].get("uri")
+
+                    logger.info(f"Successfully created Google Calendar event: {event_id}, meet_link={meet_link}")
+                    return BookingResponse(
+                        success=True,
+                        event_id=event_id,
+                        start=start_iso,
+                        end=end_iso,
+                        meet_url=meet_link,
+                        message=f"Meeting successfully booked for {name}.",
+                    )
+                except HttpError as http_err:
+                    logger.error(f"Google Calendar API failed during event creation: {http_err}")
                     return BookingResponse(
                         success=False,
                         reason="CALENDAR_ERROR",
-                        message="Calendar service could not confirm event creation.",
+                        message="Failed to create calendar event with provider.",
+                    )
+                except Exception as ex:
+                    logger.error(f"Unexpected error creating calendar event: {ex}")
+                    return BookingResponse(
+                        success=False,
+                        reason="CALENDAR_ERROR",
+                        message="An unexpected error occurred while booking the meeting.",
+                    )
+            else:
+                # Production validation: ensure mock mode isn't accidentally serving real users
+                if settings.is_production and not settings.ENABLE_MOCK_FALLBACK:
+                    logger.error("Attempted booking in production without valid Google Calendar credentials.")
+                    return BookingResponse(
+                        success=False,
+                        reason="CALENDAR_CONFIGURATION_ERROR",
+                        message="Calendar system is temporarily unavailable for scheduling.",
                     )
 
-                logger.info(f"Successfully created Google Calendar event: {event_id}")
+                # Mock mode: Record in-memory event and return simulated event ID
+                mock_id = f"mock_evt_{uuid.uuid4().hex[:12]}"
+                mock_meet = f"https://meet.google.com/mock-{uuid.uuid4().hex[:3]}-{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:3]}"
+                self._mock_events.append({
+                    "id": mock_id,
+                    "name": name,
+                    "email": email,
+                    "start": start_dt,
+                    "end": end_dt,
+                    "summary": f"BrainCX Discovery Call - {name}",
+                })
+                logger.info(f"Mock calendar event created: {mock_id} for {name} ({email})")
                 return BookingResponse(
                     success=True,
-                    event_id=event_id,
+                    event_id=mock_id,
                     start=start_iso,
                     end=end_iso,
-                    message=f"Meeting successfully booked for {name}.",
+                    meet_url=mock_meet,
+                    message=f"Meeting successfully booked for {name} (Mock Mode).",
                 )
-            except HttpError as http_err:
-                logger.error(f"Google Calendar API failed during event creation: {http_err}")
-                return BookingResponse(
-                    success=False,
-                    reason="CALENDAR_ERROR",
-                    message="Failed to create calendar event with provider.",
-                )
-            except Exception as ex:
-                logger.error(f"Unexpected error creating calendar event: {ex}")
-                return BookingResponse(
-                    success=False,
-                    reason="CALENDAR_ERROR",
-                    message="An unexpected error occurred while booking the meeting.",
-                )
-        else:
-            # Mock mode: Record in-memory event and return simulated event ID
-            mock_id = f"mock_evt_{uuid.uuid4().hex[:12]}"
-            self._mock_events.append({
-                "id": mock_id,
-                "name": name,
-                "email": email,
-                "start": start_dt,
-                "end": end_dt,
-                "summary": f"BrainCX Discovery Call - {name}",
-            })
-            logger.info(f"Mock calendar event created: {mock_id} for {name} ({email})")
-            return BookingResponse(
-                success=True,
-                event_id=mock_id,
-                start=start_iso,
-                end=end_iso,
-                message=f"Meeting successfully booked for {name} (Mock Mode).",
-            )
+
 
     def add_mock_busy_slot(self, start_dt: datetime, end_dt: datetime):
         """Helper for unit tests to insert a busy period in mock mode."""

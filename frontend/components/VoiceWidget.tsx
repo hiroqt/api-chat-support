@@ -46,6 +46,20 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
         );
       }
 
+      // Pre-flight check: probe browser microphone permission
+      if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((track) => track.stop());
+        } catch (micErr: any) {
+          if (micErr.name === "NotAllowedError" || micErr.name === "PermissionDeniedError") {
+            throw new Error(
+              "Microphone access was denied. Please allow microphone permissions in your browser to speak with BrainCX."
+            );
+          }
+        }
+      }
+
       const vapi = getVapiClient();
       console.log(`Initiating Vapi call with Assistant ID: ${assistantId}`);
       await vapi.start(assistantId);
@@ -62,6 +76,7 @@ export const VoiceWidget: React.FC<VoiceWidgetProps> = ({
       }
     }
   }, [setStatus]);
+
 
   const handleEndCall = useCallback(() => {
     try {

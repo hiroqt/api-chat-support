@@ -11,12 +11,15 @@ from app.schemas.calendar import (
     AvailabilityResponse,
     BookingRequest,
     BookingResponse,
+    CallSummaryWebhook,
 )
+from app.core.security import verify_vapi_auth
 from app.services.google_calendar import GoogleCalendarService, get_calendar_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
+
 
 
 def extract_vapi_tool_calls(body: dict) -> Optional[List[dict]]:
@@ -151,6 +154,7 @@ def process_single_tool_call(tool_call: dict, service: GoogleCalendarService) ->
 async def check_availability(
     request: Request,
     service: GoogleCalendarService = Depends(get_calendar_service),
+    _authorized: bool = Depends(verify_vapi_auth),
 ):
     """Handle availability requests from direct REST clients or Vapi tool-calls."""
     try:
@@ -195,6 +199,7 @@ async def check_availability(
 async def book_meeting(
     request: Request,
     service: GoogleCalendarService = Depends(get_calendar_service),
+    _authorized: bool = Depends(verify_vapi_auth),
 ):
     """Handle booking requests from direct REST clients or Vapi tool-calls."""
     try:
@@ -229,7 +234,7 @@ async def book_meeting(
         )
 
         if response.success:
-            logger.info(f"Meeting successfully booked. Event ID: {response.event_id}")
+            logger.info(f"Meeting successfully booked. Event ID: {response.event_id}, Meet: {response.meet_url}")
         else:
             logger.warning(f"Meeting booking declined: {response.reason} - {response.message}")
 
@@ -251,6 +256,7 @@ async def book_meeting(
 async def vapi_webhook(
     request: Request,
     service: GoogleCalendarService = Depends(get_calendar_service),
+    _authorized: bool = Depends(verify_vapi_auth),
 ):
     """Universal webhook endpoint for Vapi Server URL."""
     try:
@@ -271,3 +277,25 @@ async def vapi_webhook(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"error": "Expected Vapi tool-calls format."},
     )
+
+
+@router.post(
+    "/call-summary",
+    summary="Vapi End-Of-Call Webhook",
+    description="Ingest call summaries and transcripts from Vapi for telemetry and reporting.",
+)
+async def vapi_call_summary(
+    payload: CallSummaryWebhook,
+    _authorized: bool = Depends(verify_vapi_auth),
+):
+    """Log telemetry and summary data from completed Vapi voice calls."""
+    summary_preview = (payload.summary or "")[:120]
+    logger.info(
+        f"Vapi call completed. Duration: {payload.durationSeconds}s. Summary preview: {summary_preview}",
+        extra={
+            "duration": payload.durationSeconds,
+            "has_recording": bool(payload.recordingUrl),
+        },
+    )
+    return {"status": "received"}
+

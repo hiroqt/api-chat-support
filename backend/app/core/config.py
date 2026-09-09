@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     GOOGLE_REFRESH_TOKEN: Optional[str] = None
     GOOGLE_CALENDAR_ID: str = "primary"
 
+    # Environment & Security
+    ENVIRONMENT: str = "development"
+    VAPI_SECRET_TOKEN: Optional[str] = None
+    ENABLE_MOCK_FALLBACK: bool = False
+
+
     # Server Configuration
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -28,6 +34,13 @@ class Settings(BaseSettings):
     BUSINESS_HOURS_END: int = 17    # 5 PM
     MEETING_DURATION_MINUTES: int = 30
     TIMEZONE_DEFAULT: str = "America/New_York"
+    CREATE_GOOGLE_MEET_LINK: bool = True
+    ORGANIZER_EMAIL: Optional[str] = None
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production mode."""
+        return self.ENVIRONMENT.lower() in ("production", "prod")
 
     @property
     def cors_origins(self) -> List[str]:
@@ -48,3 +61,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

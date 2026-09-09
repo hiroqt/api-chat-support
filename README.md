@@ -260,7 +260,86 @@ Reserves a verified slot in Google Calendar.
 
 ---
 
-## 8. Deployment
+## 8. Production Architecture & Hardening
 
-- **Frontend**: Deploy `frontend/` to **Vercel** with environment variables `NEXT_PUBLIC_VAPI_PUBLIC_KEY`, `NEXT_PUBLIC_VAPI_ASSISTANT_ID`, and `NEXT_PUBLIC_API_BASE_URL`.
-- **Backend**: Deploy `backend/` as a Docker container or Python web service on **Render**, **Fly.io**, or **Railway** with the Google OAuth environment variables and `ALLOWED_ORIGINS`.
+The production system includes full enterprise hardening:
+
+- **Vapi Shared Secret Authentication**: All tool endpoints require `X-Vapi-Secret` or `Authorization: Bearer <token>` matching `VAPI_SECRET_TOKEN`.
+- **Google Meet Conferencing**: Auto-generates Google Meet video links (`conferenceDataVersion=1`) and sends real attendee invites via `sendUpdates="all"`.
+- **Concurrency Mutex**: Thread-safe locking prevents race condition double-bookings across concurrent requests during the pre-check window.
+- **Production Probes**:
+  - `GET /health/live`: Fast container liveness check.
+  - `GET /health/ready`: Deep readiness probe checking Google Calendar credentials and service connectivity.
+- **Call Telemetry**: Ingests Vapi `end-of-call-report` webhooks at `POST /api/calendar/call-summary` with call duration, transcript snippet, and recording status.
+- **Structured JSON Logging**: Standardized JSON formatting for Datadog, CloudWatch, GCP Cloud Logging, and BetterStack.
+- **Microphone Pre-Flight Probes**: Front-end checks browser microphone permissions before WebRTC initiation to provide clear guided prompts.
+- **CI/CD Pipeline**: GitHub Actions workflow (`.github/workflows/ci.yml`) testing Python 3.11 pytest, Next.js build, and Docker build.
+
+---
+
+## 9. Production Deployment Guide
+
+### Option A: Docker Container Deployment (GCP Cloud Run / AWS ECS / Railway / Fly.io)
+
+1. **Build and test the Docker container locally**:
+   ```bash
+   cd backend
+   docker build -t braincx-voice-agent-backend:latest .
+   docker run -p 8000:8000 --env-file .env braincx-voice-agent-backend:latest
+   ```
+
+2. **Deploy with Docker Compose**:
+   ```bash
+   cd backend
+   docker compose up -d
+   ```
+
+3. **Deploying to Google Cloud Run (Recommended)**:
+   ```bash
+   # Authenticate and submit build to GCP Artifact Registry
+   gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/braincx-voice-agent-backend
+
+   # Deploy container with environment variables
+   gcloud run deploy braincx-voice-agent-backend \
+     --image gcr.io/YOUR_PROJECT_ID/braincx-voice-agent-backend \
+     --platform managed \
+     --region us-central1 \
+     --allow-unauthenticated \
+     --set-env-vars ENVIRONMENT=production,ENABLE_MOCK_FALLBACK=false,ALLOWED_ORIGINS="https://voice.braincx.com" \
+     --set-secrets GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,GOOGLE_REFRESH_TOKEN=google-refresh-token:latest,VAPI_SECRET_TOKEN=vapi-secret-token:latest
+   ```
+
+4. **Deploying to Railway or Render**:
+   - Connect your GitHub repository (`api-chat-support`).
+   - Select `backend` as the root directory.
+   - The platform will auto-detect the `backend/Dockerfile`.
+   - Add environment variables (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `VAPI_SECRET_TOKEN`, `ENVIRONMENT=production`).
+
+---
+
+### Option B: Frontend Deployment (Vercel)
+
+1. Connect your repository to [Vercel](https://vercel.com).
+2. Set Root Directory to `frontend`.
+3. Add Production Environment Variables:
+   ```env
+   NEXT_PUBLIC_VAPI_PUBLIC_KEY="your-vapi-public-key"
+   NEXT_PUBLIC_VAPI_ASSISTANT_ID="your-vapi-assistant-id"
+   NEXT_PUBLIC_API_BASE_URL="https://your-backend-service.run.app"
+   ```
+4. Deploy. Assign your custom production domain (e.g. `voice.braincx.com`).
+
+---
+
+## 10. Pushing Your Code to GitHub
+
+To push your local commits to your GitHub repository (`hiroqt/api-chat-support`):
+
+```bash
+# Rename branch to main
+git branch -M main
+
+# Push to GitHub
+git push -u origin main
+```
+

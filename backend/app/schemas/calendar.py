@@ -258,3 +258,15 @@ class BookingResponse(BaseModel):
     message: Optional[str] = None
     start: Optional[str] = None
     end: Optional[str] = None
+    meet_url: Optional[str] = None
+
+
+class CallSummaryWebhook(BaseModel):
+    """Payload sent by Vapi when a call concludes (end-of-call-report)."""
+    message: Optional[dict] = None
+    call: Optional[dict] = None
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    recordingUrl: Optional[str] = None
+    durationSeconds: Optional[float] = None
+

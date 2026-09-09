@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  braincx-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: braincx-voice-agent-backend:latest
+    container_name: braincx-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - HOST=0.0.0.0
+      - PORT=8000
+      - ALLOWED_ORIGINS=http://localhost:3000,https://braincx.ai
+      - VAPI_SECRET_TOKEN=${VAPI_SECRET_TOKEN:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REFRESH_TOKEN=${GOOGLE_REFRESH_TOKEN:-}
+      - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID:-primary}
+      - CREATE_GOOGLE_MEET_LINK=true
+      - ENABLE_MOCK_FALLBACK=false
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

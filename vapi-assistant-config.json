@@ -36,9 +36,11 @@
           }
         },
         "server": {
-          "url": "{{API_BASE_URL}}/api/calendar/availability"
+          "url": "{{API_BASE_URL}}/api/calendar/availability",
+          "secret": "{{VAPI_SECRET_TOKEN}}"
         }
       },
+
       {
         "type": "function",
         "function": {
@@ -72,11 +74,14 @@
           }
         },
         "server": {
-          "url": "{{API_BASE_URL}}/api/calendar/book"
+          "url": "{{API_BASE_URL}}/api/calendar/book",
+          "secret": "{{VAPI_SECRET_TOKEN}}"
         }
       }
     ]
   },
+  "serverUrl": "{{API_BASE_URL}}/api/calendar/webhook",
+  "serverUrlSecret": "{{VAPI_SECRET_TOKEN}}",
   "voice": {
     "provider": "cartesia",
     "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf10"
@@ -103,3 +108,4 @@
     "function-call"
   ]
 }
+
